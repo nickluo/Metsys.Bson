@@ -18,7 +18,7 @@ namespace Metsys.Bson.Tests
         [Fact]
         public void DeserializesALong()
         {
-            var input = Serializer.Serialize(new { Long = 993l });
+            var input = Serializer.Serialize(new { Long = 993L });
             var o = Deserializer.Deserialize<Fatty>(input);
             Assert.Equal(993, o.Long);
         }

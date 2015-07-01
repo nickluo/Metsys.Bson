@@ -4,7 +4,7 @@ namespace Metsys.Bson
 {
     public class ObjectId
     {
-        private string _string;
+        private string str;
 
         public ObjectId()
         {
@@ -58,7 +58,7 @@ namespace Metsys.Bson
                 return true;
             }
 
-            if (((object)a == null) || ((object)b == null))
+            if ((a == null) || (b == null))
             {
                 return false;
             }
@@ -78,12 +78,12 @@ namespace Metsys.Bson
 
         public override string ToString()
         {
-            if (_string == null && Value != null)
+            if (str == null && Value != null)
             {
-                _string = BitConverter.ToString(Value).Replace("-", string.Empty).ToLower();
+                str = BitConverter.ToString(Value).Replace("-", string.Empty).ToLower();
             }
 
-            return _string;
+            return str ?? string.Empty;
         }
 
         public override bool Equals(object o)

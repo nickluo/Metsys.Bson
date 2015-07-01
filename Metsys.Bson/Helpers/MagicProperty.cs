@@ -5,26 +5,26 @@ namespace Metsys.Bson
 {
     internal class MagicProperty
     {
-        private readonly PropertyInfo _property;          
-        private readonly string _name;
-        private readonly bool _ignored;
-        public readonly bool _ignoredIfNull;
+        private readonly PropertyInfo property;          
+        private readonly string name;
+        private readonly bool ignored;
+        private readonly bool ignoredIfNull;
 
         public Type Type
         {
-            get { return _property.PropertyType; }
+            get { return property.PropertyType; }
         }
         public string Name
         {
-            get { return _name; }
+            get { return name; }
         }
         public bool Ignored
         {
-            get { return _ignored; }
+            get { return ignored; }
         }
         public bool IgnoredIfNull
         {
-            get { return _ignoredIfNull; }
+            get { return ignoredIfNull; }
         }
 
         public Action<object, object> Setter { get; private set; }
@@ -33,10 +33,10 @@ namespace Metsys.Bson
         
         public MagicProperty(PropertyInfo property, string name, bool ignored, bool ignoredIfNull)
         {
-            _property = property;
-            _name = name;
-            _ignored = ignored;
-            _ignoredIfNull = ignoredIfNull;
+            this.property = property;
+            this.name = name;
+            this.ignored = ignored;
+            this.ignoredIfNull = ignoredIfNull;
             Getter = CreateGetterMethod(property);
             Setter = CreateSetterMethod(property);
         }
@@ -56,6 +56,7 @@ namespace Metsys.Bson
         }
 
         //called via reflection       
+        // ReSharper disable once UnusedMember.Local
         private static Action<object, object> SetterMethod<TTarget, TParam>(PropertyInfo method) where TTarget : class
         {
             var m = method.GetSetMethod(true);
@@ -65,6 +66,7 @@ namespace Metsys.Bson
         }
 
         //called via reflection
+        // ReSharper disable once UnusedMember.Local
         private static Func<object, object> GetterMethod<TTarget, TParam>(PropertyInfo method) where TTarget : class
         {
             var m = method.GetGetMethod(true);

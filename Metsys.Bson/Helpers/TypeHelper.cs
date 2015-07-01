@@ -9,18 +9,18 @@ namespace Metsys.Bson
 {
     internal class TypeHelper
     {
-        private static readonly IDictionary<Type, TypeHelper> _cachedTypeLookup = new Dictionary<Type, TypeHelper>();
-        private static readonly BsonConfiguration _configuration = BsonConfiguration.Instance;        
+        private static readonly IDictionary<Type, TypeHelper> CachedTypeLookup = new Dictionary<Type, TypeHelper>();
+        private static readonly BsonConfiguration Configuration = BsonConfiguration.Instance;        
         
-        private readonly IDictionary<string, MagicProperty> _properties;
+        private readonly IDictionary<string, MagicProperty> properties;
 
         private TypeHelper(Type type)
         {
-            var properties = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy);
-            _properties = LoadMagicProperties(type, properties);
+            var propertyInfos = type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy);
+            properties = LoadMagicProperties(type, propertyInfos);
             if (typeof (IExpando).IsAssignableFrom(type))
             {
-                Expando = _properties["Expando"];
+                Expando = properties["Expando"];
             }
         }
 
@@ -28,21 +28,21 @@ namespace Metsys.Bson
 
         public ICollection<MagicProperty> GetProperties()
         {
-            return _properties.Values;
+            return properties.Values;
         }
 
         public MagicProperty FindProperty(string name)
         {
-            return _properties.ContainsKey(name) ? _properties[name] : null;
+            return properties.ContainsKey(name) ? properties[name] : null;
         }
 
         public static TypeHelper GetHelperForType(Type type)
         {
             TypeHelper helper;
-            if (!_cachedTypeLookup.TryGetValue(type, out helper))
+            if (!CachedTypeLookup.TryGetValue(type, out helper))
             {
                 helper = new TypeHelper(type);
-                _cachedTypeLookup[type] = helper;
+                CachedTypeLookup[type] = helper;
             }
             return helper;
         }
@@ -95,9 +95,9 @@ namespace Metsys.Bson
                 {
                     continue;
                 }
-                var name = _configuration.AliasFor(type, property.Name);
-                var ignored = _configuration.IsIgnored(type, property.Name);
-                var ignoredIfNull = _configuration.IsIgnoredIfNull(type, property.Name);
+                var name = Configuration.AliasFor(type, property.Name);
+                var ignored = Configuration.IsIgnored(type, property.Name);
+                var ignoredIfNull = Configuration.IsIgnoredIfNull(type, property.Name);
                 magic.Add(name, new MagicProperty(property, name, ignored, ignoredIfNull));
             }
             return magic;

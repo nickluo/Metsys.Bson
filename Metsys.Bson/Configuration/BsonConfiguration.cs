@@ -6,19 +6,15 @@ namespace Metsys.Bson.Configuration
 
     public class BsonConfiguration
     {
-        private readonly IDictionary<Type, IDictionary<string, string>> _aliasMap = new Dictionary<Type, IDictionary<string, string>>();
-        private readonly IDictionary<Type, HashSet<string>> _ignored = new Dictionary<Type, HashSet<string>>();
-        private readonly IDictionary<Type, HashSet<string>> _ignoredIfNull = new Dictionary<Type, HashSet<string>>();
+        private readonly IDictionary<Type, IDictionary<string, string>> aliasMap = new Dictionary<Type, IDictionary<string, string>>();
+        private readonly IDictionary<Type, HashSet<string>> ignored = new Dictionary<Type, HashSet<string>>();
+        private readonly IDictionary<Type, HashSet<string>> ignoredIfNull = new Dictionary<Type, HashSet<string>>();
         
         //not thread safe
-        private static BsonConfiguration _instance;
+        private static BsonConfiguration instance;
         internal static BsonConfiguration Instance
         {
-            get
-            {
-                if (_instance == null) { _instance = new BsonConfiguration(); }
-                return _instance;
-            }
+            get { return instance ?? (instance = new BsonConfiguration()); }
         }
         
         private BsonConfiguration(){}
@@ -27,20 +23,26 @@ namespace Metsys.Bson.Configuration
         {
             action(new TypeConfiguration<T>(Instance));
         }
+
+        public static void ForType(Action<ITypeConfiguration> action)
+        {
+            action(new TypeConfiguration(Instance));
+        }
+
         
         internal void AddMap<T>(string property, string alias)
         {
             var type = typeof (T);
-            if (!_aliasMap.ContainsKey(type))
+            if (!aliasMap.ContainsKey(type))
             {
-                _aliasMap[type] = new Dictionary<string, string>();
+                aliasMap[type] = new Dictionary<string, string>();
             }
-            _aliasMap[type][property] = alias;
+            aliasMap[type][property] = alias;
         }        
         internal string AliasFor(Type type, string property)
         {            
             IDictionary<string, string> map;
-            if (!_aliasMap.TryGetValue(type, out map))
+            if (!aliasMap.TryGetValue(type, out map))
             {
                 return property;
             }
@@ -50,31 +52,37 @@ namespace Metsys.Bson.Configuration
         public void AddIgnore<T>(string name)
         {
             var type = typeof(T);
-            if (!_ignored.ContainsKey(type))
-            {
-                _ignored[type] = new HashSet<string>();
-            }
-            _ignored[type].Add(name);
+            AddIgnore(type,name);
         }
+
+        public void AddIgnore(Type type, string name)
+        {
+            if (!ignored.ContainsKey(type))
+            {
+                ignored[type] = new HashSet<string>();
+            }
+            ignored[type].Add(name);
+        }
+
         public bool IsIgnored(Type type, string name)
         {
             HashSet<string> list;            
-            return _ignored.TryGetValue(type, out list) && list.Contains(name);
+            return ignored.TryGetValue(type, out list) && list.Contains(name);
         }
 
         public void AddIgnoreIfNull<T>(string name)
         {
             var type = typeof(T);
-            if (!_ignoredIfNull.ContainsKey(type))
+            if (!ignoredIfNull.ContainsKey(type))
             {
-                _ignoredIfNull[type] = new HashSet<string>();
+                ignoredIfNull[type] = new HashSet<string>();
             }
-            _ignoredIfNull[type].Add(name);
+            ignoredIfNull[type].Add(name);
         }
         public bool IsIgnoredIfNull(Type type, string name)
         {
             HashSet<string> list;
-            return _ignoredIfNull.TryGetValue(type, out list) && list.Contains(name);
+            return ignoredIfNull.TryGetValue(type, out list) && list.Contains(name);
         }
     }
 }

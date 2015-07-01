@@ -8,11 +8,11 @@ namespace Metsys.Bson
 {
     internal static class ObjectIdGenerator
     {        
-        private static readonly object _inclock = new object();
+        private static readonly object Inclock = new object();
 
-        private static int _counter;
-        private static readonly byte[] _machineHash = GenerateHostHash();
-        private static readonly byte[] _processId = BitConverter.GetBytes(GenerateProcId());
+        private static int counter;
+        private static readonly byte[] MachineHash = GenerateHostHash();
+        private static readonly byte[] ProcessId = BitConverter.GetBytes(GenerateProcId());
 
         public static byte[] Generate()
         {
@@ -22,10 +22,10 @@ namespace Metsys.Bson
             Array.Copy(BitConverter.GetBytes(GenerateTime()), 0, oid, copyidx, 4);
             copyidx += 4;
 
-            Array.Copy(_machineHash, 0, oid, copyidx, 3);
+            Array.Copy(MachineHash, 0, oid, copyidx, 3);
             copyidx += 3;
 
-            Array.Copy(_processId, 0, oid, copyidx, 2);
+            Array.Copy(ProcessId, 0, oid, copyidx, 2);
             copyidx += 2;
 
             Array.Copy(BitConverter.GetBytes(GenerateInc()), 0, oid, copyidx, 3);
@@ -43,9 +43,9 @@ namespace Metsys.Bson
 
         private static int GenerateInc()
         {         
-            lock (_inclock)
+            lock (Inclock)
             {
-                return _counter++;
+                return counter++;
             }
         }
         

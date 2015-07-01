@@ -16,20 +16,24 @@ namespace Metsys.Bson.Configuration
             {
                 return null;
             }
-            if (expression.Body is MemberExpression)
+            var body = expression.Body as MemberExpression;
+            if (body != null)
             {
-                return (MemberExpression)expression.Body;
+                return body;
             }
-            if (expression.Body is UnaryExpression)
+            var unaryExpression = expression.Body as UnaryExpression;
+            if (unaryExpression != null)
             {
-                var operand = ((UnaryExpression)expression.Body).Operand;
-                if (operand is MemberExpression)
+                var operand = unaryExpression.Operand;
+                var memberExpression = operand as MemberExpression;
+                if (memberExpression != null)
                 {
-                    return (MemberExpression)operand;
+                    return memberExpression;
                 }
-                if (operand is MethodCallExpression)
+                var callExpression = operand as MethodCallExpression;
+                if (callExpression != null)
                 {
-                    return ((MethodCallExpression)operand).Object as MemberExpression;
+                    return callExpression.Object as MemberExpression;
                 }
             }
             return null;
@@ -83,9 +87,10 @@ namespace Metsys.Bson.Configuration
             private string Visit(MethodCallExpression expression)
             {
                 string name = null;
-                if (expression.Object is MemberExpression)
+                var memberExpression = expression.Object as MemberExpression;
+                if (memberExpression != null)
                 {
-                    name = Visit((MemberExpression)expression.Object);
+                    name = Visit(memberExpression);
                 }
 
                 //TODO: Is there a more certain way to determine if this is an indexed property?
