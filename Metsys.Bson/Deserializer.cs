@@ -2,30 +2,31 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
-        
+
 namespace Metsys.Bson
 {
     public class Deserializer
-    {        
-        private readonly static IDictionary<Types, Type> _typeMap = new Dictionary<Types, Type>
+    {
+        private readonly static IDictionary<Types, Type> TypeMap = new Dictionary<Types, Type>
         {
              {Types.Int32, typeof(int)}, {Types.Int64, typeof (long)}, {Types.Boolean, typeof (bool)}, {Types.String, typeof (string)},
              {Types.Double, typeof(double)}, {Types.Binary, typeof (byte[])}, {Types.Regex, typeof (Regex)}, {Types.DateTime, typeof (DateTime)},
              {Types.ObjectId, typeof(ObjectId)}
         };
-        private readonly BinaryReader _reader;
-        private Document _current;
+        private readonly BinaryReader reader;
+        private Document current;
+        private static bool guidIsLittleEndian = true;
 
         private Deserializer(BinaryReader reader)
         {
-            _reader = reader;
+            this.reader = reader;
         }
-        
-        public static T Deserialize<T>(byte[] objectData) where T : class
+
+        public static T Deserialize<T>(byte[] objectData, bool littleEndian = true) where T : class
         {
+            guidIsLittleEndian = littleEndian;
             using (var ms = new MemoryStream())
             {
                 ms.Write(objectData, 0, objectData.Length);
@@ -33,41 +34,61 @@ namespace Metsys.Bson
                 return Deserialize<T>(new BinaryReader(ms));
             }
         }
-        
+
+        public static object Deserialize(MemoryStream ms, Type type, bool littleEndian = true)
+        {
+            guidIsLittleEndian = littleEndian;
+            ms.Position = 0;
+            return Deserialize(type, new BinaryReader(ms));
+        }
+
         private static T Deserialize<T>(BinaryReader stream)
         {
             return new Deserializer(stream).Read<T>();
         }
+        private static object Deserialize(Type type, BinaryReader stream)
+        {
+            return new Deserializer(stream).Read(type);
+        }
+
 
         private T Read<T>()
         {
-            NewDocument(_reader.ReadInt32());
+            NewDocument(reader.ReadInt32());
             var @object = (T)DeserializeValue(typeof(T), Types.Object);
             return @object;
         }
 
+        private object Read(Type type)
+        {
+            NewDocument(reader.ReadInt32());
+            var obj = DeserializeValue(type, Types.Object);
+            return obj;
+        }
+
+
         private void Read(int read)
         {
-            _current.Digested += read;
+            current.Digested += read;
         }
 
         private bool IsDone()
         {
-            var isDone = _current.Digested + 1 == _current.Length;
+            var isDone = current.Digested + 1 == current.Length;
             if (isDone)
             {
-                _reader.ReadByte(); // EOO
-                var old = _current;
-                _current = old.Parent;
-                if (_current != null) { Read(old.Length); }
+                reader.ReadByte(); // EOO
+                var old = current;
+                current = old.Parent;
+                if (current != null) { Read(old.Length); }
             }
             return isDone;
         }
-        
+
         private void NewDocument(int length)
         {
-            var old = _current;
-            _current = new Document { Length = length, Parent = old, Digested = 4 };
+            var old = current;
+            current = new Document { Length = length, Parent = old, Digested = 4 };
         }
 
         private object DeserializeValue(Type type, Types storedType)
@@ -100,7 +121,7 @@ namespace Metsys.Bson
             if (type == typeof(float))
             {
                 Read(8);
-                return (float)_reader.ReadDouble();
+                return (float)reader.ReadDouble();
             }
             if (storedType == Types.Binary)
             {
@@ -113,7 +134,7 @@ namespace Metsys.Bson
             if (type == typeof(bool))
             {
                 Read(1);
-                return _reader.ReadBoolean();
+                return reader.ReadBoolean();
             }
             if (type == typeof(DateTime))
             {
@@ -122,7 +143,7 @@ namespace Metsys.Bson
             if (type == typeof(ObjectId))
             {
                 Read(12);
-                return new ObjectId(_reader.ReadBytes(12));
+                return new ObjectId(reader.ReadBytes(12));
             }
             if (type == typeof(long))
             {
@@ -131,7 +152,7 @@ namespace Metsys.Bson
             if (type == typeof(double))
             {
                 Read(8);
-                return _reader.ReadDouble();
+                return reader.ReadDouble();
             }
             if (type == typeof(Regex))
             {
@@ -151,14 +172,14 @@ namespace Metsys.Bson
             while (true)
             {
                 var storageType = ReadType();
-                var name = ReadName();                
+                var name = ReadName();
                 var isNull = false;
                 if (storageType == Types.Object)
                 {
-                    var length = _reader.ReadInt32();
+                    var length = reader.ReadInt32();
                     if (length == 5)
                     {
-                        _reader.ReadByte(); //eoo
+                        reader.ReadByte(); //eoo
                         Read(5);
                         isNull = true;
                     }
@@ -169,14 +190,14 @@ namespace Metsys.Bson
                 }
                 object container = null;
                 var property = typeHelper.FindProperty(name);
-                var propertyType = property != null ? property.Type : _typeMap.ContainsKey(storageType) ? _typeMap[storageType] : typeof(object);
+                var propertyType = property != null ? property.Type : TypeMap.ContainsKey(storageType) ? TypeMap[storageType] : typeof(object);
                 if (property == null && typeHelper.Expando == null)
                 {
                     throw new BsonException(string.Format("Deserialization failed: type {0} does not have a property named {1}", type.FullName, name));
-                }                
+                }
                 if (property != null && property.Setter == null)
                 {
-                    container = property.Getter(instance);                    
+                    container = property.Getter(instance);
                 }
                 var value = isNull ? null : DeserializeValue(propertyType, storageType, container);
                 if (property == null)
@@ -202,26 +223,26 @@ namespace Metsys.Bson
                 return ReadDictionary(listType, existingContainer);
             }
 
-            NewDocument(_reader.ReadInt32());            
+            NewDocument(reader.ReadInt32());
             var itemType = ListHelper.GetListItemType(listType);
             var isObject = typeof(object) == itemType;
             var wrapper = BaseWrapper.Create(listType, itemType, existingContainer);
-                      
+
             while (!IsDone())
             {
                 var storageType = ReadType();
                 ReadName();
                 if (storageType == Types.Object)
                 {
-                    NewDocument(_reader.ReadInt32());
+                    NewDocument(reader.ReadInt32());
                 }
-                var specificItemType = isObject ? _typeMap[storageType] : itemType;
+                var specificItemType = isObject ? TypeMap[storageType] : itemType;
                 var value = DeserializeValue(specificItemType, storageType);
                 wrapper.Add(value);
             }
             return wrapper.Collection;
         }
-        
+
         private static bool IsDictionary(Type type)
         {
             var types = new List<Type>(type.GetInterfaces());
@@ -233,13 +254,13 @@ namespace Metsys.Bson
                     return true;
                 }
             }
-            return false; 
+            return false;
         }
 
         private object ReadDictionary(Type listType, object existingContainer)
         {
             var valueType = ListHelper.GetDictionarValueType(listType);
-            var isObject = typeof (object) == valueType;
+            var isObject = typeof(object) == valueType;
             var container = existingContainer == null ? ListHelper.CreateDictionary(listType, ListHelper.GetDictionarKeyType(listType), valueType) : (IDictionary)existingContainer;
 
             while (!IsDone())
@@ -249,9 +270,9 @@ namespace Metsys.Bson
                 var key = ReadName();
                 if (storageType == Types.Object)
                 {
-                    NewDocument(_reader.ReadInt32());
+                    NewDocument(reader.ReadInt32());
                 }
-                var specificItemType = isObject ? _typeMap[storageType] : valueType;
+                var specificItemType = isObject ? TypeMap[storageType] : valueType;
                 var value = DeserializeValue(specificItemType, storageType);
                 container.Add(key, value);
             }
@@ -260,16 +281,21 @@ namespace Metsys.Bson
 
         private object ReadBinary()
         {
-            var length = _reader.ReadInt32();
-            var subType = _reader.ReadByte();
+            var length = reader.ReadInt32();
+            var subType = reader.ReadByte();
             Read(5 + length);
+            if (subType == 0)
+            {
+                return reader.ReadBytes(length);
+            }
             if (subType == 2)
             {
-                return _reader.ReadBytes(_reader.ReadInt32());
+                return reader.ReadBytes(reader.ReadInt32());
             }
-            if (subType == 3)
+            if (subType == 3 || subType == 4)
             {
-                return new Guid(_reader.ReadBytes(length));
+                var guidNormal = new Guid(reader.ReadBytes(length));
+                return guidIsLittleEndian ? guidNormal : guidNormal.Reverse();
             }
             throw new BsonException("No support for binary type: " + subType);
         }
@@ -278,7 +304,7 @@ namespace Metsys.Bson
         {
             var buffer = new List<byte>(128); //todo: use a pool to prevent fragmentation
             byte b;
-            while ((b = _reader.ReadByte()) > 0)
+            while ((b = reader.ReadByte()) > 0)
             {
                 buffer.Add(b);
             }
@@ -288,9 +314,9 @@ namespace Metsys.Bson
 
         private string ReadString()
         {
-            var length = _reader.ReadInt32();
-            var buffer = _reader.ReadBytes(length - 1); //todo: again, look at fragementation prevention
-            _reader.ReadByte(); //null;
+            var length = reader.ReadInt32();
+            var buffer = reader.ReadBytes(length - 1); //todo: again, look at fragementation prevention
+            reader.ReadByte(); //null;
             Read(4 + length);
 
             return Encoding.UTF8.GetString(buffer);
@@ -302,13 +328,13 @@ namespace Metsys.Bson
             {
                 case Types.Int32:
                     Read(4);
-                    return _reader.ReadInt32();
+                    return reader.ReadInt32();
                 case Types.Int64:
                     Read(8);
-                    return (int)_reader.ReadInt64();
+                    return (int)reader.ReadInt64();
                 case Types.Double:
                     Read(8);
-                    return (int)_reader.ReadDouble();
+                    return (int)reader.ReadDouble();
                 default:
                     throw new BsonException("Could not create an int from " + storedType);
             }
@@ -320,13 +346,13 @@ namespace Metsys.Bson
             {
                 case Types.Int32:
                     Read(4);
-                    return _reader.ReadInt32();
+                    return reader.ReadInt32();
                 case Types.Int64:
                     Read(8);
-                    return _reader.ReadInt64();
+                    return reader.ReadInt64();
                 case Types.Double:
                     Read(8);
-                    return (long)_reader.ReadDouble();
+                    return (long)reader.ReadDouble();
                 default:
                     throw new BsonException("Could not create an int64 from " + storedType);
             }
@@ -361,15 +387,15 @@ namespace Metsys.Bson
         private Types ReadType()
         {
             Read(1);
-            return (Types)_reader.ReadByte();
+            return (Types)reader.ReadByte();
         }
 
         private ScopedCode ReadScopedCode()
         {
-            _reader.ReadInt32(); //length
+            reader.ReadInt32(); //length
             Read(4);
             var name = ReadString();
-            NewDocument(_reader.ReadInt32());
+            NewDocument(reader.ReadInt32());
             return new ScopedCode { CodeString = name, Scope = DeserializeValue(typeof(object), Types.Object) };
         }
     }

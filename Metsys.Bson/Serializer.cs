@@ -6,11 +6,11 @@ using System.Collections;
 using System.Collections.Generic;
 
 namespace Metsys.Bson
-{    
+{
 
     public class Serializer
     {
-        private static readonly IDictionary<Type, Types> _typeMap = new Dictionary<Type, Types>
+        private static readonly IDictionary<Type, Types> TypeMap = new Dictionary<Type, Types>
                                                                             {
                                                                                 {typeof (int), Types.Int32},
                                                                                 {typeof (long), Types.Int64},
@@ -25,16 +25,18 @@ namespace Metsys.Bson
                                                                                 {typeof (ObjectId), Types.ObjectId},
                                                                                 {typeof (ScopedCode), Types.ScopedCode}
                                                                             };
- 
-        private readonly BinaryWriter _writer;
-        private Document _current;
 
-        public static byte[] Serialize<T>(T document)
+        private readonly BinaryWriter writer;
+        private Document current;
+        private static bool guidIsLittleEndian = true;
+
+        public static byte[] Serialize<T>(T document, bool littleEndian = true)
         {
+            guidIsLittleEndian = littleEndian;
             var type = document.GetType();
             if (type.IsValueType || typeof(IEnumerable).IsAssignableFrom(type))
             {
-               throw new BsonException("Root type must be an non-enumerable object");
+                throw new BsonException("Root type must be an non-enumerable object");
             }
             using (var ms = new MemoryStream(250))
             using (var writer = new BinaryWriter(ms))
@@ -42,65 +44,65 @@ namespace Metsys.Bson
                 new Serializer(writer).WriteDocument(document);
                 return ms.ToArray();
             }
-        }        
+        }
         private Serializer(BinaryWriter writer)
         {
-            _writer = writer;
-        }        
-         
+            this.writer = writer;
+        }
+
         private void NewDocument()
         {
-            var old = _current;
-            _current = new Document { Parent = old, Length = (int)_writer.BaseStream.Position, Digested = 4 };
-            _writer.Write(0); // length placeholder
-        }        
+            var old = current;
+            current = new Document { Parent = old, Length = (int)writer.BaseStream.Position, Digested = 4 };
+            writer.Write(0); // length placeholder
+        }
         private void EndDocument(bool includeEeo)
         {
-            var old = _current;
+            var old = current;
             if (includeEeo)
             {
                 Written(1);
-                _writer.Write((byte)0);
+                writer.Write((byte)0);
             }
- 
-            _writer.Seek(_current.Length, SeekOrigin.Begin);
-            _writer.Write(_current.Digested); // override the document length placeholder
-            _writer.Seek(0, SeekOrigin.End); // back to the end
-            _current = _current.Parent;
-            if (_current != null)
+
+            writer.Seek(current.Length, SeekOrigin.Begin);
+            writer.Write(current.Digested); // override the document length placeholder
+            writer.Seek(0, SeekOrigin.End); // back to the end
+            current = current.Parent;
+            if (current != null)
             {
                 Written(old.Digested);
             }
         }
- 
+
         private void Written(int length)
         {
-            _current.Digested += length;
+            current.Digested += length;
         }
-         
+
         private void WriteDocument(object document)
         {
             NewDocument();
-            WriteObject(document); 
+            WriteObject(document);
             EndDocument(true);
         }
- 
+
         private void WriteObject(object document)
         {
             var typeHelper = TypeHelper.GetHelperForType(document.GetType());
             foreach (var property in typeHelper.GetProperties())
             {
                 if (property.Ignored) { continue; }
-                var name = property.Name; 
+                var name = property.Name;
                 var value = property.Getter(document);
                 if (value == null && property.IgnoredIfNull)
                 {
                     continue;
                 }
                 SerializeMember(name, value);
-            }          
+            }
         }
- 
+
         private void SerializeMember(string name, object value)
         {
             if (value == null)
@@ -109,32 +111,32 @@ namespace Metsys.Bson
                 WriteName(name);
                 return;
             }
- 
+
             var type = value.GetType();
             if (type.IsEnum)
             {
                 type = Enum.GetUnderlyingType(type);
             }
- 
+
             Types storageType;
-            if (!_typeMap.TryGetValue(type, out storageType))
+            if (!TypeMap.TryGetValue(type, out storageType))
             {
                 // this isn't a simple type;
                 Write(name, value);
                 return;
             }
- 
+
             Write(storageType);
             WriteName(name);
             switch (storageType)
             {
                 case Types.Int32:
                     Written(4);
-                    _writer.Write((int)value);
+                    writer.Write((int)value);
                     return;
                 case Types.Int64:
                     Written(8);
-                    _writer.Write((long)value);
+                    writer.Write((long)value);
                     return;
                 case Types.String:
                     Write((string)value);
@@ -143,21 +145,21 @@ namespace Metsys.Bson
                     Written(8);
                     if (value is float)
                     {
-                        _writer.Write(Convert.ToDouble((float)value));
+                        writer.Write(Convert.ToDouble((float)value));
                     }
                     else
                     {
-                        _writer.Write((double)value);
+                        writer.Write((double)value);
                     }
- 
+
                     return;
                 case Types.Boolean:
                     Written(1);
-                    _writer.Write((bool)value ? (byte)1 : (byte)0);
+                    writer.Write((bool)value ? (byte)1 : (byte)0);
                     return;
                 case Types.DateTime:
                     Written(8);
-                    _writer.Write((long)((DateTime)value).Subtract(Helper.Epoch).TotalMilliseconds);
+                    writer.Write((long)((DateTime)value).Subtract(Helper.Epoch).TotalMilliseconds);
                     return;
                 case Types.Binary:
                     WriteBinnary(value);
@@ -167,14 +169,14 @@ namespace Metsys.Bson
                     return;
                 case Types.ObjectId:
                     Written(((ObjectId)value).Value.Length);
-                    _writer.Write(((ObjectId)value).Value);
+                    writer.Write(((ObjectId)value).Value);
                     return;
                 case Types.Regex:
                     Write((Regex)value);
                     break;
             }
         }
- 
+
         private void Write(string name, object value)
         {
             if (value is IDictionary)
@@ -192,7 +194,7 @@ namespace Metsys.Bson
                 NewDocument();
                 Write((IEnumerable)value);
                 EndDocument(true);
-            }       
+            }
             else
             {
                 Write(Types.Object);
@@ -200,7 +202,7 @@ namespace Metsys.Bson
                 WriteDocument(value); // Write manages new/end document
             }
         }
- 
+
         private void Write(IEnumerable enumerable)
         {
             var index = 0;
@@ -209,7 +211,7 @@ namespace Metsys.Bson
                 SerializeMember((index++).ToString(), value);
             }
         }
- 
+
         private void Write(IDictionary dictionary)
         {
             foreach (var key in dictionary.Keys)
@@ -217,97 +219,97 @@ namespace Metsys.Bson
                 SerializeMember((string)key, dictionary[key]);
             }
         }
- 
+
         private void WriteBinnary(object value)
         {
-            if (value is byte[])
+            var bytes = value as byte[];
+            if (bytes != null)
             {
-                var bytes = (byte[])value;
                 var length = bytes.Length;
-                _writer.Write(length + 4);
-                _writer.Write((byte)2);
-                _writer.Write(length);
-                _writer.Write(bytes);
+                writer.Write(length + 4);
+                writer.Write((byte)2);
+                writer.Write(length);
+                writer.Write(bytes);
                 Written(9 + length);
             }
             else if (value is Guid)
             {
                 var guid = (Guid)value;
-                var bytes = guid.ToByteArray();
-                _writer.Write(bytes.Length);
-                _writer.Write((byte)3);
-                _writer.Write(bytes);
+                bytes = guidIsLittleEndian ? guid.ToByteArray() : guid.Reverse().ToByteArray();
+                writer.Write(bytes.Length);
+                writer.Write((byte)3);
+                writer.Write(bytes);
                 Written(5 + bytes.Length);
             }
         }
- 
+
         private void Write(Types type)
         {
-            _writer.Write((byte)type);
+            writer.Write((byte)type);
             Written(1);
         }
- 
+
         private void WriteName(string name)
         {
             var bytes = Encoding.UTF8.GetBytes(name);
-            _writer.Write(bytes);
-            _writer.Write((byte)0);
+            writer.Write(bytes);
+            writer.Write((byte)0);
             Written(bytes.Length + 1);
         }
- 
+
         private void Write(string name)
         {
             var bytes = Encoding.UTF8.GetBytes(name);
-            _writer.Write(bytes.Length + 1);
-            _writer.Write(bytes);
-            _writer.Write((byte)0);
+            writer.Write(bytes.Length + 1);
+            writer.Write(bytes);
+            writer.Write((byte)0);
             Written(bytes.Length + 5); // stringLength + length + null byte
         }
- 
+
         private void Write(Regex regex)
         {
             WriteName(regex.ToString());
- 
+
             var options = string.Empty;
             if ((regex.Options & RegexOptions.ECMAScript) == RegexOptions.ECMAScript)
             {
                 options = string.Concat(options, 'e');
             }
- 
+
             if ((regex.Options & RegexOptions.IgnoreCase) == RegexOptions.IgnoreCase)
             {
                 options = string.Concat(options, 'i');
             }
- 
+
             if ((regex.Options & RegexOptions.CultureInvariant) == RegexOptions.CultureInvariant)
             {
                 options = string.Concat(options, 'l');
             }
- 
+
             if ((regex.Options & RegexOptions.Multiline) == RegexOptions.Multiline)
             {
                 options = string.Concat(options, 'm');
             }
- 
+
             if ((regex.Options & RegexOptions.Singleline) == RegexOptions.Singleline)
             {
                 options = string.Concat(options, 's');
             }
- 
+
             options = string.Concat(options, 'u'); // all .net regex are unicode regex, therefore:
             if ((regex.Options & RegexOptions.IgnorePatternWhitespace) == RegexOptions.IgnorePatternWhitespace)
             {
                 options = string.Concat(options, 'w');
             }
- 
+
             if ((regex.Options & RegexOptions.ExplicitCapture) == RegexOptions.ExplicitCapture)
             {
                 options = string.Concat(options, 'x');
             }
- 
+
             WriteName(options);
         }
- 
+
         private void Write(ScopedCode value)
         {
             NewDocument();
