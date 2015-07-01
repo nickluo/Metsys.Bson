@@ -62,8 +62,10 @@
     <Compile Include="Configuration\BsonConfiguration.cs" />
     <Compile Include="Configuration\ExpressionHelper.cs" />
     <Compile Include="Configuration\ITypeConfiguration.cs" />
+    <Compile Include="Configuration\ITypeConfigurationGeneric.cs" />
     <Compile Include="Deserializer.cs" />
     <Compile Include="Helpers\Document.cs" />
+    <Compile Include="Helpers\GuidExtension.cs" />
     <Compile Include="Helpers\Helper.cs" />
     <Compile Include="Helpers\Lists\ArrayWrapper.cs" />
     <Compile Include="Helpers\Lists\CollectionWrapper.cs" />
